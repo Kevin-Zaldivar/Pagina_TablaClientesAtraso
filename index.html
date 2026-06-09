@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Cobros - Servicredith</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;background:#f0f2f5;padding:20px}
+    .container{max-width:1100px;margin:0 auto;background:white;border-radius:10px;padding:30px;box-shadow:0 2px 12px rgba(0,0,0,0.12)}
+    h1{color:#1a237e;margin-bottom:4px}
+    .subtitle{color:#666;margin-bottom:22px;font-size:14px}
+    .stats{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+    .stat-card{padding:10px 20px;border-radius:8px;color:white;font-weight:bold;font-size:14px}
+    .s-total{background:#1a237e}.s-1{background:#FFA500}.s-2{background:#FF6600}.s-3{background:#CC0000}
+    .controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+    .btn{padding:7px 14px;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:bold}
+    .b-all{background:#e3f2fd;color:#1565c0}.b-none{background:#fce4ec;color:#c62828}
+    .b-1{background:#fff3e0;color:#e65100}.b-2{background:#fbe9e7;color:#bf360c}.b-3{background:#ffebee;color:#b71c1c}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    thead{background:#1a237e;color:white}
+    th{padding:10px 8px;text-align:left;white-space:nowrap}
+    td{padding:8px;border-bottom:1px solid #eee;vertical-align:middle}
+    tr:hover{background:#f9f9f9}
+    input[type=checkbox]{width:17px;height:17px;cursor:pointer}
+    .badge{padding:3px 8px;border-radius:4px;color:white;font-size:11px;font-weight:bold;white-space:nowrap}
+    .badge-1{background:#FFA500}.badge-2{background:#FF6600}.badge-3{background:#CC0000}
+    .footer{margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .btn-enviar{background:#1a237e;color:white;padding:11px 30px;font-size:15px;border:none;border-radius:8px;cursor:pointer;font-weight:bold}
+    .btn-enviar:hover{background:#283593}
+    .btn-enviar:disabled{background:#90a4ae;cursor:not-allowed}
+    .btn-cancelar{background:#eee;color:#333;padding:11px 22px;font-size:14px;border:none;border-radius:8px;cursor:pointer}
+    #contador{color:#555;font-size:14px;font-weight:bold}
+    .alert-info{background:#e3f2fd;color:#1565c0;border-left:4px solid #1565c0;padding:12px 18px;border-radius:6px;margin-bottom:15px;font-size:13px}
+    .sin-tel{color:#e53935;font-size:11px;font-style:italic}
+    .loading{text-align:center;padding:40px;color:#666;font-size:16px}
+    .error{background:#ffebee;color:#c62828;padding:15px;border-radius:6px;margin:20px 0}
+    @media(max-width:700px){
+      table{font-size:11px}th,td{padding:5px 4px}
+      .container{padding:15px}
+      .stats{gap:8px}
+      .stat-card{padding:8px 12px;font-size:12px}
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📋 Gestión de Cobros</h1>
+  <p class="subtitle">Servicredith - Área de Cobros</p>
+
+  <div id="app">
+    <div class="loading">⏳ Cargando clientes en atraso...</div>
+  </div>
+</div>
+
+<script>
+  // ══════════════════════════════════════════════
+  //  CONFIGURACIÓN — Cambia solo estas dos URLs
+  // ══════════════════════════════════════════════
+  const WEBHOOK_DATOS         = 'https://n8n-n8n.n7noih.easypanel.host/webhook/cobros-datos';
+  const WEBHOOK_CONFIRMACION  = 'https://n8n-n8n.n7noih.easypanel.host/webhook/cobros-confirmacion';
+
+  // ══════════════════════════════════════════════
+  //  Cargar datos al abrir la página
+  // ══════════════════════════════════════════════
+  async function cargarClientes() {
+    try {
+      const resp = await fetch(WEBHOOK_DATOS);
+      if (!resp.ok) throw new Error('Error ' + resp.status);
+      const data = await resp.json();
+
+      // Acepta tanto { clientes: [...] } como un array directo
+      const clientes = Array.isArray(data) ? data : (data.clientes || []);
+      renderApp(clientes);
+
+    } catch(e) {
+      document.getElementById('app').innerHTML = `
+        <div class="error">
+          ❌ No se pudieron cargar los datos.<br>
+          <small>${e.message}</small><br><br>
+          <button class="btn b-all" onclick="cargarClientes()">🔄 Reintentar</button>
+        </div>`;
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  //  Renderizar tabla
+  // ══════════════════════════════════════════════
+  function renderApp(clientes) {
+    const total  = clientes.length;
+    const total1 = clientes.filter(c => c.Nivel === 'AVISO_1').length;
+    const total2 = clientes.filter(c => c.Nivel === 'AVISO_2').length;
+    const total3 = clientes.filter(c => c.Nivel === 'AVISO_3_FINAL').length;
+
+    const etiquetas = {
+      AVISO_1:       { texto: '⚠️ 1 Cuota Vencida',  clase: 'badge-1' },
+      AVISO_2:       { texto: '🔴 2 Cuotas Vencidas', clase: 'badge-2' },
+      AVISO_3_FINAL: { texto: '🚨 ÚLTIMO AVISO (3+)', clase: 'badge-3' }
+    };
+
+    const filas = clientes.map(c => {
+      const e      = etiquetas[c.Nivel] || { texto: c.Nivel, clase: 'badge-1' };
+      const telHtml = c.Telefono
+        ? c.Telefono
+        : '<span class="sin-tel">Sin teléfono</span>';
+      const checked = c.Telefono ? 'checked' : '';
+      return `
+        <tr>
+          <td style="text-align:center">
+            <input type="checkbox" name="ids" value="${c.ID_Credito}" data-nivel="${c.Nivel}" ${checked}>
+          </td>
+          <td>${c.ID_Credito}</td>
+          <td>${c.Nombre}</td>
+          <td>${telHtml}</td>
+          <td><span class="badge ${e.clase}">${e.texto}</span></td>
+          <td style="text-align:center">${c.Cuotas_Vencidas}</td>
+          <td style="text-align:center">${c.Dias_Atraso} días</td>
+          <td>${c.Total_vencido}</td>
+          <td>${c.Monto_Cuota}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('app').innerHTML = `
+      <div class="alert-info">
+        ℹ️ Todos los clientes con teléfono vienen <strong>seleccionados por defecto</strong>.
+        Desmarque los que NO desea notificar.
+      </div>
+
+      <div class="stats">
+        <div class="stat-card s-total">Total: ${total}</div>
+        <div class="stat-card s-1">⚠️ 1 cuota: ${total1}</div>
+        <div class="stat-card s-2">🔴 2 cuotas: ${total2}</div>
+        <div class="stat-card s-3">🚨 3+ cuotas: ${total3}</div>
+      </div>
+
+      <div class="controls">
+        <button class="btn b-all"  onclick="sel(true)">✅ Todos</button>
+        <button class="btn b-none" onclick="sel(false)">❌ Ninguno</button>
+        <button class="btn b-1"   onclick="selNivel('AVISO_1')">Solo 1 cuota</button>
+        <button class="btn b-2"   onclick="selNivel('AVISO_2')">Solo 2 cuotas</button>
+        <button class="btn b-3"   onclick="selNivel('AVISO_3_FINAL')">Solo último aviso</button>
+        <button class="btn b-all" style="background:#f3e5f5;color:#6a1b9a" onclick="cargarClientes()">🔄 Actualizar</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Enviar</th><th>ID Crédito</th><th>Nombre</th><th>Teléfono</th>
+            <th>Nivel</th><th>Cuotas</th><th>Atraso</th><th>Total vencido</th><th>Cuota</th>
+          </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+
+      <div class="footer">
+        <button class="btn-enviar" onclick="enviar()">📤 Enviar Notificaciones</button>
+        <button class="btn-cancelar" onclick="cancelar()">Cancelar</button>
+        <span id="contador"></span>
+      </div>`;
+
+    // Guardar clientes en variable global para usarlos al enviar
+    window._clientes = clientes;
+    updateCount();
+    document.querySelectorAll('input[name="ids"]')
+      .forEach(cb => cb.addEventListener('change', updateCount));
+  }
+
+  // ══════════════════════════════════════════════
+  //  Funciones de selección
+  // ══════════════════════════════════════════════
+  function updateCount() {
+    const n = document.querySelectorAll('input[name="ids"]:checked').length;
+    const el = document.getElementById('contador');
+    if (el) el.textContent = n + ' cliente(s) seleccionado(s)';
+  }
+  function sel(v) {
+    document.querySelectorAll('input[name="ids"]').forEach(c => c.checked = v);
+    updateCount();
+  }
+  function selNivel(nivel) {
+    document.querySelectorAll('input[name="ids"]').forEach(cb => {
+      cb.checked = cb.dataset.nivel === nivel;
+    });
+    updateCount();
+  }
+
+  // ══════════════════════════════════════════════
+  //  Enviar notificaciones
+  // ══════════════════════════════════════════════
+  async function enviar() {
+    const seleccionados = [];
+    document.querySelectorAll('input[name="ids"]:checked').forEach(cb => {
+      const c = window._clientes.find(x => x.ID_Credito === cb.value);
+      if (c) seleccionados.push(c);
+    });
+
+    if (!seleccionados.length) { alert('Seleccione al menos un cliente.'); return; }
+
+    const sinTel = seleccionados.filter(c => !c.Telefono);
+    if (sinTel.length > 0) {
+      const ok = confirm(`⚠️ ${sinTel.length} cliente(s) no tienen teléfono y serán ignorados.\n¿Desea continuar con los ${seleccionados.length - sinTel.length} restantes?`);
+      if (!ok) return;
+    }
+
+    const conTel = seleccionados.filter(c => c.Telefono);
+    if (!conTel.length) { alert('Ningún cliente seleccionado tiene teléfono registrado.'); return; }
+    if (!confirm(`¿Confirma enviar notificaciones a ${conTel.length} cliente(s)?`)) return;
+
+    const btn = document.querySelector('.btn-enviar');
+    btn.disabled = true;
+    btn.textContent = '⏳ Enviando...';
+
+    try {
+      await fetch(WEBHOOK_CONFIRMACION, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seleccionados: conTel })
+      });
+
+      btn.textContent = '✅ Enviado correctamente';
+      btn.style.background = '#2e7d32';
+      document.getElementById('contador').textContent =
+        '✅ ' + conTel.length + ' notificaciones enviadas';
+
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = '📤 Enviar Notificaciones';
+      alert('Error al enviar. Intente nuevamente.');
+    }
+  }
+
+  async function cancelar() {
+    if (!confirm('¿Cancelar sin enviar notificaciones?')) return;
+    fetch(WEBHOOK_CONFIRMACION, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancelado: true, seleccionados: [] })
+    });
+    document.getElementById('app').innerHTML =
+      '<div style="text-align:center;padding:60px"><h2>❌ Operación cancelada</h2><br><button class="btn b-all" onclick="location.reload()">🔄 Volver</button></div>';
+  }
+
+  // Iniciar
+  cargarClientes();
+</script>
+</body>
+</html>
