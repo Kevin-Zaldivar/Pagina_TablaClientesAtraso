@@ -64,7 +64,7 @@
   // ══════════════════════════════════════════════
   //  CONFIGURACIÓN
   // ══════════════════════════════════════════════
-  const WEBHOOK_DATOS        = 'https://n8n-n8n.n7noih.easypanel.host/webhook/cobros-datos';
+  const WEBHOOK_DATOS = 'https://n8n-n8n.n7noih.easypanel.host/webhook/cobros-datos';
   const WEBHOOK_CONFIRMACION = 'https://n8n-n8n.n7noih.easypanel.host/webhook/cobros-confirmacion';
 
   const INTERVALO_SEGUNDOS = 30; // ← Cambia aquí el intervalo de actualización (en segundos)
@@ -412,6 +412,10 @@
 
   // Iniciar
   cargarClientes();
+
+setInterval(() => {
+  cargarClientes();
+}, 30000);
 </script>
 </body>
 </html>
